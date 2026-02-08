@@ -1,400 +1,479 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, Trophy, MessageSquare, Star, BarChart3, X, Radio, ChevronRight, Coffee, Flag, Award, Medal, Users } from 'lucide-react';
-import { generateBoard, checkWin } from './utils';
-import { BingoBoard, GameState, GameMode, ChatMessage, Competitor, GameStats, TournamentPhase } from './types';
-import { getBingoCommentStream, getAnnouncerChatStream } from './geminiService';
 import { 
-  playDrawSound, 
-  playMarkSound, 
-  playWinSound 
-} from './soundUtils';
+  RotateCcw, Trophy, Star, BarChart3, Radio, Coffee, Users, Check, Medal, 
+  Award, Flag, Sparkles, PartyPopper, Crown, ArrowDown, ShieldAlert, 
+  ShoppingBag, Palette, UserCircle, Coins, ChevronRight, Lock, Map, Swords
+} from 'lucide-react';
+import { generateBoard, checkWin } from './utils';
+import { BingoBoard, GameState, GameMode, ChatMessage, Competitor, GameStats, StoreItem } from './types';
+import { getBingoCommentStream } from './geminiService';
+import { playDrawSound, playMarkSound, playWinSound, playTriumphantFanfare } from './soundUtils';
 import confetti from 'canvas-confetti';
 
-const COMPETITORS_DATA = [
-  { id: '1', name: 'Dona Benta', color: 'bg-pink-500' },
-  { id: '2', name: 'Seu Genésio', color: 'bg-blue-500' },
-  { id: '3', name: 'Robo-Bingo', color: 'bg-purple-500' },
-  { id: '4', name: 'Seu Juvêncio', color: 'bg-teal-500' },
-  { id: '5', name: 'Vovó Zuzu', color: 'bg-orange-400' },
-  { id: '6', name: 'Tio Barnabé', color: 'bg-amber-700' },
-  { id: '7', name: 'Menina Bia', color: 'bg-fuchsia-600' },
-  { id: '8', name: 'Dr. Simas', color: 'bg-cyan-600' },
-  { id: '9', name: 'Tião Caminhão', color: 'bg-slate-700' },
-  { id: '10', name: 'Sra. Margarida', color: 'bg-rose-400' },
-  { id: '11', name: 'Zé do Pulo', color: 'bg-lime-500' },
-  { id: '12', name: 'Sertanejo Bão', color: 'bg-emerald-800' },
+const ALL_COMPETITORS = [
+  { id: '1', name: 'Seu Juvêncio', color: 'bg-emerald-500', dot: '#10b981' },
+  { id: '2', name: 'Robô-Bingo', color: 'bg-purple-500', dot: '#a855f7' },
+  { id: '3', name: 'Sertanejo Bão', color: 'bg-green-700', dot: '#15803d' },
+  { id: '4', name: 'Dona Neide', color: 'bg-pink-500', dot: '#ec4899' },
+  { id: '5', name: 'Gamer do Milho', color: 'bg-cyan-500', dot: '#06b6d4' },
+  { id: '6', name: 'Professor Azaia', color: 'bg-slate-700', dot: '#334155' },
+  { id: '7', name: 'Zé do Trevo', color: 'bg-lime-500', dot: '#84cc16' },
+  { id: '8', name: 'Tia do Doce', color: 'bg-orange-400', dot: '#fb923c' },
+  { id: '9', name: 'Mestre Cuca', color: 'bg-red-600', dot: '#dc2626' },
+  { id: '10', name: 'Cigana da Sorte', color: 'bg-indigo-500', dot: '#6366f1' },
+  { id: '11', name: 'Vovô Radinho', color: 'bg-amber-800', dot: '#92400e' },
+  { id: '12', name: 'Menino do Milho', color: 'bg-yellow-400', dot: '#facc15' },
+];
+
+const STORE_ITEMS: StoreItem[] = [
+  { id: 'theme-neon', name: 'Tema Neon', price: 150, type: 'THEME', value: 'border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.6)] bg-slate-900 !text-cyan-50', description: 'Sua cartela brilha no escuro!' },
+  { id: 'theme-gold', name: 'Tema Real', price: 500, type: 'THEME', value: 'border-yellow-600 bg-gradient-to-br from-amber-50 to-yellow-100 shadow-2xl', description: 'A cartela mais luxuosa da paróquia.' },
+  { id: 'theme-retro', name: 'Tema Retrô', price: 80, type: 'THEME', value: 'border-amber-800 bg-orange-50 font-mono', description: 'Estilo clássico dos anos 80.' },
+  { id: 'title-lucky', name: 'Sorte Brava', price: 40, type: 'TITLE', value: 'Sorte Brava 🍀', description: 'Para quem nunca erra o milho.' },
+  { id: 'title-king', name: 'O Rei do Milho', price: 200, type: 'TITLE', value: 'Rei do Milho 🌽', description: 'Respeitado em todas as barracas.' },
+  { id: 'title-legend', name: 'Lenda Urbana', price: 400, type: 'TITLE', value: 'Lenda Urbana 👻', description: 'O terror dos oponentes.' },
+  { id: 'title-expert', name: 'Mestre do Globo', price: 100, type: 'TITLE', value: 'Mestre do Globo 🌎', description: 'Conhece cada rima do Chico.' },
+  { id: 'title-rich', name: 'Barão do Bingo', price: 1000, type: 'TITLE', value: 'Barão do Bingo 💰', description: 'Pura ostentação de geminicoins.' },
 ];
 
 const INITIAL_STATS: GameStats = {
-  gamesPlayed: 0,
-  gamesWon: 0,
-  totalBallsDrawn: 0,
-  totalCorrectMarks: 0,
-  totalPossibleMarks: 0,
-  bestWinBalls: null,
-  trophies: { gold: 0, silver: 0, bronze: 0 }
+  gamesPlayed: 0, gamesWon: 0, totalBallsDrawn: 0, totalCorrectMarks: 0, totalPossibleMarks: 0, bestWinBalls: null,
+  coins: 0, // Inicia com 0 moedas como solicitado
+  inventory: [],
+  equipped: { theme: '', title: '', icon: '' },
+  trophies: { gold: 0, silver: 0, bronze: 0, preliminary: 0, finalist: 0 }
 };
 
 const COLUMN_THEMES = [
-  { letter: 'B', text: 'text-blue-600', border: 'border-blue-700', marked: 'bg-gradient-to-br from-blue-500 to-blue-700 text-white border-blue-800' },
-  { letter: 'I', text: 'text-red-600', border: 'border-red-700', marked: 'bg-gradient-to-br from-red-500 to-red-700 text-white border-red-800' },
-  { letter: 'N', text: 'text-amber-500', border: 'border-amber-600', marked: 'bg-gradient-to-br from-amber-400 to-amber-600 text-white border-amber-700' },
-  { letter: 'G', text: 'text-emerald-600', border: 'border-emerald-700', marked: 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white border-emerald-800' },
-  { letter: 'O', text: 'text-indigo-600', border: 'border-indigo-700', marked: 'bg-gradient-to-br from-indigo-500 to-indigo-700 text-white border-indigo-800' },
+  { letter: 'B', line: 'bg-blue-600' }, { letter: 'I', line: 'bg-red-600' }, { letter: 'N', line: 'bg-orange-500' }, 
+  { letter: 'G', line: 'bg-emerald-600' }, { letter: 'O', line: 'bg-indigo-600' },
 ];
 
 const App: React.FC = () => {
   const [board, setBoard] = useState<BingoBoard>(generateBoard());
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
-  const [qualifiersOtherHeats, setQualifiersOtherHeats] = useState<Competitor[]>([]);
   const [gameState, setGameState] = useState<GameState>('HOME');
   const [gameMode, setGameMode] = useState<GameMode>('FRIENDLY');
-  const [tournamentPhase, setTournamentPhase] = useState<TournamentPhase>('PRELIMINARY');
-  const [currentHeat, setCurrentHeat] = useState<number>(1);
+  const [tournamentStep, setTournamentStep] = useState(1); 
   const [drawnNumbers, setDrawnNumbers] = useState<number[]>([]);
   const [currentNumber, setCurrentNumber] = useState<number | null>(null);
   const [rollingNumber, setRollingNumber] = useState<number | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isCalling, setIsCalling] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [justLanded, setJustLanded] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [victoryFlash, setVictoryFlash] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [lastMarked, setLastMarked] = useState<{row: number, col: number} | null>(null);
+  const [isCelebrating, setIsCelebrating] = useState(false);
+  const [playerRank, setPlayerRank] = useState<number | null>(null);
+  const [autoScroll, setAutoScroll] = useState(false);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const [lastMarkedPos, setLastMarkedPos] = useState<{row: number, col: number} | null>(null);
   const [lastError, setLastError] = useState<{row: number, col: number} | null>(null);
-  const [bingoCount, setBingoCount] = useState<number>(0);
-  const [playerRank, setPlayerRank] = useState<number>(0);
+  
   const [stats, setStats] = useState<GameStats>(() => {
-    const saved = localStorage.getItem('bingo_gemini_stats');
+    const saved = localStorage.getItem('bingo_stats_v9');
     return saved ? JSON.parse(saved) : INITIAL_STATS;
   });
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const rollIntervalRef = useRef<number>(0);
+  const bingoCardRef = useRef<HTMLDivElement>(null);
+  const [cardHeight, setCardHeight] = useState<number>(0);
 
   useEffect(() => {
-    localStorage.setItem('bingo_gemini_stats', JSON.stringify(stats));
+    localStorage.setItem('bingo_stats_v9', JSON.stringify(stats));
   }, [stats]);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [chatMessages, isTyping]);
-
-  useEffect(() => {
-    if (isCalling) {
-      rollIntervalRef.current = window.setInterval(() => setRollingNumber(Math.floor(Math.random() * 75) + 1), 80);
-    } else {
-      if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
-      setRollingNumber(null);
-    }
-    return () => { if (rollIntervalRef.current) clearInterval(rollIntervalRef.current); };
-  }, [isCalling]);
-
-  const triggerAnnouncerReaction = async (msg: string) => {
-    setIsTyping(true);
-    setChatMessages(prev => [...prev, { role: 'announcer', text: '' }]);
-    const stream = getAnnouncerChatStream(msg, { 
-      drawnNumbers, 
-      gameState, 
-      competitors: competitors.map(c => ({ name: c.name, markedCount: c.board.flat().filter(x => x.marked).length })) 
-    });
-    let fullText = "";
-    for await (const chunk of stream) {
-      fullText += chunk;
-      setChatMessages(prev => { 
-        const updated = [...prev]; 
-        updated[updated.length - 1] = { ...updated[updated.length - 1], text: fullText }; 
-        return updated; 
-      });
-    }
-    setIsTyping(false);
-  };
-
-  useEffect(() => {
-    if (gameState === 'WON' || gameState === 'LOST' || gameState === 'QUALIFIED') {
-      const isFinal = tournamentPhase === 'FINAL';
-      const isWin = gameState === 'WON';
-      const isQualify = gameState === 'QUALIFIED';
-      
-      if (isWin || isQualify) {
-        setVictoryFlash(true);
-        setTimeout(() => setVictoryFlash(false), 300);
-        if (!isMuted) playWinSound();
-        confetti({ particleCount: 200, spread: 80, origin: { y: 0.6 } });
-      }
-
-      if (isFinal) {
-        setStats(prev => {
-          const newStats = { ...prev, gamesPlayed: prev.gamesPlayed + 1 };
-          if (isWin) {
-            newStats.gamesWon += 1;
-            if (playerRank === 1) newStats.trophies.gold += 1;
-            else if (playerRank === 2) newStats.trophies.silver += 1;
-            else if (playerRank === 3) newStats.trophies.bronze += 1;
-          }
-          return newStats;
-        });
-      }
-
-      let reaction = isWin ? "BINGO! O JOGADOR LEVOU A MELHOR!" : "FIM DE JOGO! ALGUÉM BATEU PRIMEIRO!";
-      triggerAnnouncerReaction(reaction);
-    }
+    const updateHeight = () => {
+      if (bingoCardRef.current) setCardHeight(bingoCardRef.current.offsetHeight);
+    };
+    const timer = setTimeout(updateHeight, 100);
+    window.addEventListener('resize', updateHeight);
+    return () => { window.removeEventListener('resize', updateHeight); clearTimeout(timer); };
   }, [gameState]);
 
-  const enterTournament = () => {
-    setGameMode('TOURNAMENT');
-    setTournamentPhase('PRELIMINARY');
-    setCurrentHeat(1);
-    setBingoCount(0);
-    setPlayerRank(0);
-    
-    const shuffled = [...COMPETITORS_DATA].sort(() => Math.random() - 0.5);
-    const heat1_AIs = shuffled.slice(0, 3);
-    const heat2_AIs = shuffled.slice(3, 6);
-    const heat3_AIs = shuffled.slice(6, 9);
-    const heat4_AIs = shuffled.slice(9, 12);
-    
-    const newCompetitors: Competitor[] = heat1_AIs.map(c => ({ 
-      ...c, board: generateBoard(), isWinner: false, isEliminated: false, progress: 0, qualified: false 
-    }));
-    
-    setQualifiersOtherHeats([
-      { ...heat2_AIs[0], qualified: true } as Competitor,
-      { ...heat3_AIs[0], qualified: true } as Competitor,
-      { ...heat4_AIs[0], qualified: true } as Competitor
-    ]);
-    
-    setBoard(generateBoard());
-    setCompetitors(newCompetitors);
-    setDrawnNumbers([]);
-    setChatMessages([]);
-    setGameState('BRACKET');
+  const handleChatScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAutoScroll(isAtBottom);
+    if (isAtBottom) setHasNewMessages(false);
   };
 
-  const enterFriendly = () => {
-    setGameMode('FRIENDLY');
-    setTournamentPhase('PRELIMINARY');
-    setBingoCount(0);
-    setPlayerRank(0);
-    const friendlyAIs = [...COMPETITORS_DATA].sort(() => Math.random() - 0.5).slice(0, 3);
-    const newCompetitors: Competitor[] = friendlyAIs.map(c => ({ 
-      ...c, board: generateBoard(), isWinner: false, isEliminated: false, progress: 0, qualified: false 
-    }));
-    setBoard(generateBoard());
-    setCompetitors(newCompetitors);
-    setDrawnNumbers([]);
-    setChatMessages([]);
-    setGameState('PLAYING');
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+      setAutoScroll(true);
+      setHasNewMessages(false);
+    }
   };
 
-  const startFinal = () => {
-    setTournamentPhase('FINAL');
-    setBingoCount(0);
-    setPlayerRank(0);
-    const finalCompetitors: Competitor[] = qualifiersOtherHeats.map(c => ({
+  useEffect(() => {
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: isTyping ? 'auto' : 'smooth' });
+    } else if (!autoScroll && chatMessages.length > 1) {
+      setHasNewMessages(true);
+    }
+  }, [chatMessages, isTyping]);
+
+  const calculateFinalRankings = useCallback(() => {
+    const playerProgress = (board.flat().filter(c => c.marked).length / 25) * 100;
+    const results = [
+      { id: 'player', name: 'Você', progress: playerProgress, isPlayer: true },
+      ...competitors.map(c => ({ id: c.id, name: c.name, progress: c.progress, isPlayer: false }))
+    ].sort((a, b) => b.progress - a.progress);
+
+    const rank = results.findIndex(r => r.isPlayer) + 1;
+    setPlayerRank(rank);
+
+    let earnedCoins = 0;
+    if (gameMode === 'TOURNAMENT') {
+      if (rank === 1) earnedCoins = 25;
+      else if (rank === 2) earnedCoins = 15;
+      else if (rank === 3) earnedCoins = 8;
+    } else if (gameMode === 'FRIENDLY') {
+      if (rank === 1) earnedCoins = 5;
+    }
+
+    setStats(prev => {
+      const newTrophies = { ...prev.trophies };
+      if (gameMode === 'TOURNAMENT') {
+        if (tournamentStep === 5 && rank === 1) newTrophies.finalist += 1;
+        else if (rank === 1) newTrophies.preliminary += 1;
+        
+        if (rank === 1) newTrophies.gold += 1;
+        else if (rank === 2) newTrophies.silver += 1;
+        else if (rank === 3) newTrophies.bronze += 1;
+      }
+      return { ...prev, coins: prev.coins + earnedCoins, trophies: newTrophies };
+    });
+  }, [board, competitors, gameMode, tournamentStep]);
+
+  useEffect(() => {
+    if (gameState === 'WON' || gameState === 'LOST') {
+      calculateFinalRankings();
+      if (gameState === 'WON') {
+        setVictoryFlash(true);
+        setIsCelebrating(true);
+        setTimeout(() => setVictoryFlash(false), 300);
+        setTimeout(() => setIsCelebrating(false), 5000);
+        playWinSound(); setTimeout(playTriumphantFanfare, 600);
+        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+        setStats(prev => ({ ...prev, gamesWon: prev.gamesWon + 1 }));
+      }
+      setStats(prev => ({ ...prev, gamesPlayed: prev.gamesPlayed + 1 }));
+    }
+  }, [gameState, calculateFinalRankings]);
+
+  const initGame = (mode: GameMode, step: number = 1) => {
+    setGameMode(mode);
+    setTournamentStep(step);
+    setPlayerRank(null);
+    setLastMarkedPos(null);
+    setLastError(null);
+    
+    // Friendly: fixed 4 AIs. Tournament: scales 3-7 based on round
+    const numCompetitors = mode === 'FRIENDLY' ? 4 : (3 + (step - 1));
+    const pool = [...ALL_COMPETITORS].sort(() => Math.random() - 0.5);
+    const ais = pool.slice(0, numCompetitors).map(c => ({
       ...c, board: generateBoard(), isWinner: false, isEliminated: false, progress: 0, qualified: false
     }));
+    
+    setCompetitors(ais as Competitor[]);
     setBoard(generateBoard());
-    setCompetitors(finalCompetitors);
     setDrawnNumbers([]);
-    setChatMessages([]);
+    setCurrentNumber(null);
+    setAutoScroll(true);
+    
+    let welcomeMsg = mode === 'FRIENDLY' 
+      ? "Amistoso valendo 5 moedas! Vamos nessa!" 
+      : (step === 5 ? "GRANDE FINAL! O bicho vai pegar!" : `Preliminar ${step}. Rumo à vitória!`);
+    
+    setChatMessages([{ role: 'announcer', text: `Chico do Globo na área! ${welcomeMsg}` }]);
     setGameState('PLAYING');
   };
 
-  const drawNumber = useCallback(async () => {
-    if (drawnNumbers.length >= 75 || gameState !== 'PLAYING' || isCalling) return;
-    
-    setIsCalling(true);
-    setJustLanded(false);
-    if (!isMuted) playDrawSound();
-    
-    let newNum: number;
-    do { newNum = Math.floor(Math.random() * 75) + 1; } while (drawnNumbers.includes(newNum));
-    
-    setStats(prev => ({ ...prev, totalBallsDrawn: prev.totalBallsDrawn + 1 }));
+  const buyItem = (item: StoreItem) => {
+    if (stats.coins >= item.price && !stats.inventory.includes(item.id)) {
+      setStats(prev => ({
+        ...prev,
+        coins: prev.coins - item.price,
+        inventory: [...prev.inventory, item.id]
+      }));
+    }
+  };
 
-    let newBingoCount = bingoCount;
-    const updatedCompetitors = competitors.map(comp => {
-      const newBoard = comp.board.map(row => row.map(cell => (cell.value === newNum ? { ...cell, marked: true } : cell)));
-      const isWinner = checkWin(newBoard) !== null;
-      if (isWinner && !comp.qualified) {
-        newBingoCount++;
-        comp.qualified = true;
-        comp.isWinner = true;
-        comp.rank = newBingoCount;
-      }
-      return { ...comp, board: newBoard, progress: (newBoard.flat().filter(c => c.marked).length / 25) * 100 };
+  const equipItem = (item: StoreItem) => {
+    setStats(prev => ({
+      ...prev,
+      equipped: { ...prev.equipped, [item.type.toLowerCase()]: item.id }
+    }));
+  };
+
+  const draw = useCallback(async () => {
+    if (isCalling || gameState !== 'PLAYING' || drawnNumbers.length >= 75) return;
+    setIsCalling(true);
+    playDrawSound();
+    let n: number;
+    do { n = Math.floor(Math.random() * 75) + 1; } while (drawnNumbers.includes(n));
+    await new Promise(r => setTimeout(r, 600));
+    
+    const updatedAIs = competitors.map(c => {
+      const nb = c.board.map(r => r.map(cell => cell.value === n ? { ...cell, marked: true } : cell));
+      const won = checkWin(nb) !== null;
+      if (won && !c.qualified) c.qualified = true;
+      return { ...c, board: nb, progress: (nb.flat().filter(x => x.marked).length / 25) * 100 };
     });
 
-    const stream = getBingoCommentStream(newNum, updatedCompetitors.map(c => `${c.name} (${c.progress.toFixed(0)}%)`).join(', '));
-    await new Promise(resolve => setTimeout(resolve, 600));
-    
-    setDrawnNumbers(prev => [...prev, newNum]);
-    setCurrentNumber(newNum);
-    setCompetitors(updatedCompetitors);
-    setBingoCount(newBingoCount);
+    setDrawnNumbers(prev => [...prev, n]);
+    setCurrentNumber(n);
+    setCompetitors(updatedAIs);
+    if (updatedAIs.some(c => c.qualified)) setGameState('LOST');
     setIsCalling(false);
-    setJustLanded(true);
 
-    if (gameMode === 'FRIENDLY' && newBingoCount >= 1 && playerRank === 0) setGameState('LOST');
-    else if (tournamentPhase === 'PRELIMINARY' && newBingoCount >= 1 && playerRank === 0) setGameState('LOST');
-    else if (tournamentPhase === 'FINAL' && newBingoCount >= 4 && playerRank === 0) setGameState('LOST');
-
-    setTimeout(() => setJustLanded(false), 400);
-    setChatMessages(prev => [...prev, { role: 'announcer', number: newNum, text: '' }]);
+    const stream = getBingoCommentStream(n);
     setIsTyping(true);
-    let fullText = "";
+    setChatMessages(prev => [...prev, { role: 'announcer', text: '' }]);
+    let full = "";
     for await (const chunk of stream) {
-      fullText += chunk;
-      setChatMessages(prev => { 
-        const updated = [...prev]; 
-        updated[updated.length - 1] = { ...updated[updated.length - 1], text: fullText }; 
-        return updated; 
+      full += chunk;
+      setChatMessages(prev => {
+        const up = [...prev];
+        up[up.length - 1] = { ...up[up.length - 1], text: full };
+        return up;
       });
     }
     setIsTyping(false);
-  }, [drawnNumbers, gameState, isCalling, isMuted, competitors, bingoCount, tournamentPhase, playerRank, gameMode]);
+  }, [drawnNumbers, gameState, isCalling, competitors]);
 
-  const markCell = (row: number, col: number) => {
+  const mark = (r: number, c: number) => {
     if (gameState !== 'PLAYING') return;
-    const cell = board[row][col];
-    if (cell.value === "FREE" || cell.marked) return;
-    
+    const cell = board[r][c];
+    if (cell.marked) return;
     if (drawnNumbers.includes(cell.value as number)) {
-      if (!isMuted) playMarkSound();
-      setLastMarked({row, col});
-      setTimeout(() => setLastMarked(null), 750);
-      const newBoard = board.map((r, ri) => r.map((c, ci) => (ri === row && ci === col ? { ...c, marked: true } : c)));
-      setBoard(newBoard);
-      if (checkWin(newBoard)) {
-        const rank = bingoCount + 1;
-        setPlayerRank(rank);
-        setBingoCount(rank);
-        if (gameMode === 'FRIENDLY') setGameState('WON');
-        else if (tournamentPhase === 'PRELIMINARY') setGameState('QUALIFIED');
-        else if (rank <= 3) setGameState('WON');
-        else setGameState('LOST');
-      }
+      playMarkSound();
+      setLastMarkedPos({row: r, col: c});
+      const nb = board.map((row, ri) => row.map((cel, ci) => ri === r && ci === c ? { ...cel, marked: true } : cel));
+      setBoard(nb);
+      if (checkWin(nb)) setGameState('WON');
     } else {
-      setLastError({row, col});
+      setLastError({row: r, col: c});
       setTimeout(() => setLastError(null), 300);
     }
   };
 
-  if (gameState === 'HOME') {
+  if (gameState === 'STORE') {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
-        <div className="max-w-5xl w-full flex flex-col items-center animate-in fade-in zoom-in-95 duration-700">
-          <div className="text-center mb-12 space-y-4">
-            <h1 className="text-7xl md:text-9xl font-lucky text-red-600 drop-shadow-2xl tracking-tighter leading-none mb-4">BINGO!</h1>
-            <p className="text-2xl text-slate-600 font-medium max-w-2xl mx-auto italic">"A maior quermesse digital do mundo!"</p>
+      <div className="min-h-screen bg-slate-50 p-6 md:p-10 flex flex-col items-center overflow-y-auto">
+        <header className="w-full max-w-6xl flex justify-between items-center mb-12">
+          <div className="flex flex-col">
+            <h1 className="text-6xl font-lucky text-slate-800 uppercase flex items-center gap-4">
+              <ShoppingBag className="text-[#ef4444]" size={50} /> Mercado do Chico
+            </h1>
+            <p className="text-slate-500 font-bold uppercase text-sm flex items-center gap-2">
+              <Coins className="text-yellow-500" size={16} /> Seu Tesouro: {stats.coins} moedas
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-6xl">
-            <button onClick={enterTournament} className="group bg-white p-8 rounded-[40px] shadow-xl border-b-8 border-yellow-600 hover:-translate-y-2 transition-all flex flex-col items-center text-center space-y-4">
-              <Trophy size={40} className="text-yellow-600" />
-              <h2 className="text-2xl font-lucky text-slate-800 uppercase">Torneio</h2>
-              <div className="bg-red-600 text-white font-bold py-3 px-8 rounded-full shadow-lg text-sm">JOGAR</div>
-            </button>
-            <button onClick={enterFriendly} className="group bg-white p-8 rounded-[40px] shadow-xl border-b-8 border-blue-600 hover:-translate-y-2 transition-all flex flex-col items-center text-center space-y-4">
-              <Coffee size={40} className="text-blue-600" />
-              <h2 className="text-2xl font-lucky text-slate-800 uppercase">Amistoso</h2>
-              <div className="bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg text-sm">JOGAR</div>
-            </button>
-            <button onClick={() => setGameState('TROPHY_ROOM')} className="group bg-white p-8 rounded-[40px] shadow-xl border-b-8 border-emerald-600 hover:-translate-y-2 transition-all flex flex-col items-center text-center space-y-4">
-              <Award size={40} className="text-emerald-600" />
-              <h2 className="text-2xl font-lucky text-slate-800 uppercase">Estante</h2>
-              <div className="bg-emerald-600 text-white font-bold py-3 px-8 rounded-full shadow-lg text-sm">VER</div>
-            </button>
-            <button onClick={() => setShowStats(true)} className="group bg-white p-8 rounded-[40px] shadow-xl border-b-8 border-slate-600 hover:-translate-y-2 transition-all flex flex-col items-center text-center space-y-4">
-              <BarChart3 size={40} className="text-slate-600" />
-              <h2 className="text-2xl font-lucky text-slate-800 uppercase">Status</h2>
-              <div className="bg-slate-600 text-white font-bold py-3 px-8 rounded-full shadow-lg text-sm">STATS</div>
-            </button>
-          </div>
+          <button onClick={() => setGameState('HOME')} className="bg-red-600 text-white px-8 py-4 rounded-[25px] font-lucky text-2xl shadow-xl hover:scale-105 transition-transform">
+             SAIR
+          </button>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 w-full max-w-6xl">
+          {STORE_ITEMS.map(item => {
+            const isOwned = stats.inventory.includes(item.id);
+            const isEquipped = Object.values(stats.equipped).includes(item.id);
+            const canAfford = stats.coins >= item.price;
+
+            return (
+              <div key={item.id} className={`bg-white p-8 rounded-[40px] shadow-lg border-2 transition-all flex flex-col ${isEquipped ? 'border-blue-500 bg-blue-50/30' : 'border-slate-100'}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div className={`p-4 rounded-2xl ${item.type === 'THEME' ? 'bg-purple-100 text-purple-600' : 'bg-amber-100 text-amber-600'}`}>
+                    {item.type === 'THEME' ? <Palette size={32} /> : <UserCircle size={32} />}
+                  </div>
+                  <div className="text-right">
+                    <p className="font-lucky text-2xl text-slate-800">{item.name}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase">{item.type}</p>
+                  </div>
+                </div>
+                <p className="text-slate-500 mb-8 flex-1 italic">"{item.description}"</p>
+                {isOwned ? (
+                  <button onClick={() => equipItem(item)} className={`w-full py-4 rounded-2xl font-lucky text-xl uppercase ${isEquipped ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    {isEquipped ? 'Equipado' : 'Equipar'}
+                  </button>
+                ) : (
+                  <button onClick={() => buyItem(item)} disabled={!canAfford} className={`w-full py-4 rounded-2xl font-lucky text-xl uppercase flex items-center justify-center gap-2 ${canAfford ? 'bg-yellow-500 text-white shadow-lg' : 'bg-slate-100 text-slate-300'}`}>
+                    <Coins size={20} /> {item.price} COMPRAR
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
-        {showStats && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] flex items-center justify-center p-4" onClick={() => setShowStats(false)}>
-            <div className="bg-white rounded-[40px] p-8 max-w-lg w-full shadow-2xl space-y-6" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between items-center"><h2 className="text-3xl font-lucky text-blue-600">SUAS CONQUISTAS</h2><X className="cursor-pointer" onClick={() => setShowStats(false)} /></div>
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-3xl border"><p className="text-xs font-bold text-slate-400 uppercase">Partidas</p><p className="text-3xl font-lucky">{stats.gamesPlayed}</p></div>
-                  <div className="bg-slate-50 p-4 rounded-3xl border"><p className="text-xs font-bold text-slate-400 uppercase">Vitórias</p><p className="text-3xl font-lucky">{stats.gamesWon}</p></div>
-               </div>
+      </div>
+    );
+  }
+
+  if (gameState === 'HOME' || gameState === 'TROPHY_ROOM' || gameState === 'BRACKET') {
+    if (gameState === 'HOME') {
+      return (
+        <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] overflow-hidden">
+          <div className="text-center mb-16">
+            <h1 className="text-[10rem] font-lucky text-[#ef4444] drop-shadow-2xl mb-0 leading-none">BINGO!</h1>
+            <p className="text-2xl text-slate-500 font-medium italic">"A maior quermesse digital do mundo!"</p>
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <span className="bg-yellow-100 text-yellow-700 px-6 py-2 rounded-full font-bold text-lg flex items-center gap-2 border-2 border-yellow-200 shadow-sm">
+                <Coins size={20} /> {stats.coins} moedas
+              </span>
+              {stats.equipped.title && (
+                <span className="bg-blue-600 text-white px-6 py-2 rounded-full font-lucky text-lg uppercase tracking-widest shadow-lg">
+                  {STORE_ITEMS.find(i => i.id === stats.equipped.title)?.value}
+                </span>
+              )}
             </div>
           </div>
-        )}
-      </div>
-    );
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 w-full max-w-7xl">
+            <div className="bg-white p-8 rounded-[40px] shadow-xl border-b-[12px] border-amber-400 flex flex-col items-center gap-4 hover:-translate-y-2 transition-transform cursor-pointer" onClick={() => initGame('TOURNAMENT')}>
+              <div className="bg-amber-50 p-6 rounded-full"><Map size={48} className="text-amber-500" /></div>
+              <h2 className="font-lucky text-2xl uppercase text-slate-800">Torneio</h2>
+              <button className="bg-red-600 text-white font-lucky py-2 px-8 rounded-full shadow-lg uppercase">Iniciar</button>
+            </div>
+            <div className="bg-white p-8 rounded-[40px] shadow-xl border-b-[12px] border-blue-500 flex flex-col items-center gap-4 hover:-translate-y-2 transition-transform cursor-pointer" onClick={() => initGame('FRIENDLY')}>
+              <div className="bg-blue-50 p-6 rounded-full"><Coffee size={48} className="text-blue-500" /></div>
+              <h2 className="font-lucky text-2xl uppercase text-slate-800">Amistoso</h2>
+              <button className="bg-blue-600 text-white font-lucky py-2 px-8 rounded-full shadow-lg uppercase">Jogar</button>
+            </div>
+            <div className="bg-white p-8 rounded-[40px] shadow-xl border-b-[12px] border-[#ef4444] flex flex-col items-center gap-4 hover:-translate-y-2 transition-transform cursor-pointer" onClick={() => setGameState('STORE')}>
+              <div className="bg-red-50 p-6 rounded-full"><ShoppingBag size={48} className="text-[#ef4444]" /></div>
+              <h2 className="font-lucky text-2xl uppercase text-slate-800">Loja</h2>
+              <button className="bg-[#ef4444] text-white font-lucky py-2 px-8 rounded-full shadow-lg uppercase">Mercado</button>
+            </div>
+            <div className="bg-white p-8 rounded-[40px] shadow-xl border-b-[12px] border-emerald-500 flex flex-col items-center gap-4 hover:-translate-y-2 transition-transform cursor-pointer" onClick={() => setGameState('TROPHY_ROOM')}>
+              <div className="bg-emerald-50 p-6 rounded-full"><Award size={48} className="text-emerald-500" /></div>
+              <h2 className="font-lucky text-2xl uppercase text-slate-800">Estante</h2>
+              <button className="bg-emerald-600 text-white font-lucky py-2 px-8 rounded-full shadow-lg uppercase">Ver</button>
+            </div>
+            <div className="bg-white p-8 rounded-[40px] shadow-xl border-b-[12px] border-slate-700 flex flex-col items-center gap-4 hover:-translate-y-2 transition-transform cursor-pointer" onClick={() => setGameState('BRACKET')}>
+              <div className="bg-slate-100 p-6 rounded-full"><BarChart3 size={48} className="text-slate-700" /></div>
+              <h2 className="font-lucky text-2xl uppercase text-slate-800">Status</h2>
+              <button className="bg-slate-700 text-white font-lucky py-2 px-8 rounded-full shadow-lg uppercase">Stats</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (gameState === 'TROPHY_ROOM') {
+      return (
+        <div className="min-h-screen bg-[#fffbeb] p-10 flex flex-col items-center overflow-y-auto">
+          <header className="w-full max-w-5xl flex justify-between items-center mb-16">
+             <div className="flex flex-col">
+              <h1 className="text-7xl font-lucky text-amber-900 uppercase">Sua Coleção</h1>
+              <p className="text-amber-700 font-bold uppercase tracking-widest text-sm">Orgulho da quermesse</p>
+             </div>
+             <button onClick={() => setGameState('HOME')} className="bg-red-600 text-white p-5 rounded-[25px] font-lucky text-2xl shadow-xl flex items-center gap-3">VOLTAR</button>
+          </header>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-8 w-full max-w-7xl">
+            <div className="bg-white p-10 rounded-[45px] shadow-xl flex flex-col items-center gap-4 border-b-8 border-yellow-400">
+              <Trophy size={80} className="text-yellow-500" />
+              <h3 className="font-lucky text-2xl text-slate-800">OURO</h3>
+              <div className="text-7xl font-lucky text-yellow-600">{stats.trophies.gold}</div>
+            </div>
+            <div className="bg-white p-10 rounded-[45px] shadow-xl flex flex-col items-center gap-4 border-b-8 border-slate-300">
+              <Medal size={80} className="text-slate-400" />
+              <h3 className="font-lucky text-2xl text-slate-800">PRATA</h3>
+              <div className="text-7xl font-lucky text-slate-400">{stats.trophies.silver}</div>
+            </div>
+            <div className="bg-white p-10 rounded-[45px] shadow-xl flex flex-col items-center gap-4 border-b-8 border-orange-400">
+              <Award size={80} className="text-orange-500" />
+              <h3 className="font-lucky text-2xl text-slate-800">BRONZE</h3>
+              <div className="text-7xl font-lucky text-orange-500">{stats.trophies.bronze}</div>
+            </div>
+            <div className="bg-white p-10 rounded-[45px] shadow-xl flex flex-col items-center gap-4 border-b-8 border-blue-500">
+              <Star size={80} className="text-blue-500" />
+              <h3 className="font-lucky text-2xl text-slate-800">PRELIMINAR</h3>
+              <div className="text-7xl font-lucky text-blue-600">{stats.trophies.preliminary}</div>
+            </div>
+            <div className="bg-white p-10 rounded-[45px] shadow-xl flex flex-col items-center gap-4 border-b-8 border-yellow-700 bg-yellow-50">
+              <Crown size={80} className="text-yellow-700" />
+              <h3 className="font-lucky text-2xl text-slate-800">FINALISTA</h3>
+              <div className="text-7xl font-lucky text-yellow-800">{stats.trophies.finalist}</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return <div onClick={() => setGameState('HOME')}>Voltar</div>;
   }
 
-  if (gameState === 'TROPHY_ROOM') {
-    return (
-      <div className="min-h-screen bg-orange-50 flex items-center justify-center p-6 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]">
-        <div className="max-w-4xl w-full space-y-12 text-center animate-in fade-in zoom-in-95 duration-500">
-           <button onClick={() => setGameState('HOME')} className="inline-flex items-center gap-2 bg-white px-6 py-2 rounded-full font-bold shadow-md hover:bg-slate-50 transition-all"><RotateCcw size={18} /> VOLTAR</button>
-           <h2 className="text-6xl font-lucky text-amber-900 drop-shadow-md uppercase">Estante de Troféus</h2>
-           <div className="bg-orange-900/10 p-12 rounded-[60px] border-b-[20px] border-orange-950/20 grid grid-cols-1 md:grid-cols-3 gap-12 items-end">
-              <div className="flex flex-col items-center gap-4"><Medal size={120} className="text-slate-400" /><p className="font-lucky text-2xl text-slate-600">{stats.trophies.silver} PRATA</p></div>
-              <div className="flex flex-col items-center gap-4 -translate-y-12"><Trophy size={180} className="text-yellow-500" /><p className="font-lucky text-4xl text-yellow-700">{stats.trophies.gold} OURO</p></div>
-              <div className="flex flex-col items-center gap-4"><Medal size={120} className="text-orange-700" /><p className="font-lucky text-2xl text-orange-800">{stats.trophies.bronze} BRONZE</p></div>
-           </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (gameState === 'BRACKET') {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
-        <div className="max-w-md w-full text-center space-y-12 animate-in fade-in duration-500">
-          <h2 className="text-6xl font-lucky text-yellow-500 uppercase">Heat #1</h2>
-          <p className="text-slate-400 font-bold uppercase tracking-widest">Elimine seus oponentes para chegar na final!</p>
-          <button onClick={() => setGameState('PLAYING')} className="bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-lucky text-3xl py-6 px-16 rounded-full shadow-[0_10px_0_rgb(161,98,7)] transition-all uppercase tracking-tighter">Entrar na Roda!</button>
-        </div>
-      </div>
-    );
-  }
+  const equippedThemeClass = STORE_ITEMS.find(i => i.id === stats.equipped.theme)?.value || '';
+  const playerTitle = STORE_ITEMS.find(i => i.id === stats.equipped.title)?.value || '';
 
   return (
-    <div className={`min-h-screen bg-slate-100 text-slate-900 flex flex-col p-4 md:p-8 transition-all duration-1000 ${gameState === 'WON' || gameState === 'QUALIFIED' ? 'bg-yellow-50' : gameState === 'LOST' ? 'bg-red-50' : ''}`}>
-      {victoryFlash && <div className="fixed inset-0 bg-white z-[100] animate-pulse pointer-events-none" />}
-      <header className="flex flex-col items-center mb-8">
-        <h1 className="text-5xl md:text-7xl font-lucky text-red-600 drop-shadow-lg tracking-widest">BINGO!</h1>
-      </header>
-      <main className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-3 flex flex-col gap-6">
-          <div className="bg-white p-6 rounded-[40px] shadow-xl border-4 border-red-500 flex flex-col items-center justify-center min-h-[200px]">
-            <span className="text-xs font-bold uppercase tracking-widest mb-2 text-red-500">Próxima Bola</span>
-            <div className={`text-8xl font-lucky transition-all ${justLanded ? 'scale-125 text-green-600' : isCalling ? 'blur-sm' : 'text-slate-800'}`}>
+    <div className={`min-h-screen flex flex-col items-center p-4 md:p-8 transition-colors duration-1000 ${gameState === 'WON' ? 'bg-yellow-50' : 'bg-[#f1f5f9]'}`}>
+      {victoryFlash && <div className="fixed inset-0 bg-white z-[500] animate-pulse pointer-events-none" />}
+      
+      {isCelebrating && (
+        <div className="fixed inset-0 z-[600] pointer-events-none flex items-center justify-center bg-yellow-400/20 backdrop-blur-[2px]">
+          <div className="relative flex flex-col items-center animate-in zoom-in text-center px-4">
+            <Trophy size={280} className="text-yellow-500 drop-shadow-[0_0_60px_#eab308] animate-bounce" />
+            <h2 className="text-[12rem] font-lucky text-yellow-600 leading-none">BINGO!</h2>
+          </div>
+        </div>
+      )}
+
+      <div className="text-center mb-8 relative w-full max-w-4xl">
+        <div className="flex items-center justify-between w-full mb-4 px-2">
+           <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-2">
+              <Coins size={16} className="text-yellow-500" />
+              <span className="font-bold text-slate-600">{stats.coins}</span>
+           </div>
+           {gameMode === 'TOURNAMENT' && (
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map(step => (
+                <div key={step} className={`w-2 h-2 rounded-full ${step === tournamentStep ? 'bg-[#ef4444] scale-150' : step < tournamentStep ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              ))}
+            </div>
+           )}
+           <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-2">
+              <Users size={16} className="text-blue-500" />
+              <span className="font-bold text-slate-600">{competitors.length + 1}</span>
+           </div>
+        </div>
+        <h1 className="text-[6rem] md:text-[8rem] font-lucky text-[#ef4444] drop-shadow-lg leading-none tracking-tighter">BINGO!</h1>
+      </div>
+
+      <main className="w-full max-w-[1500px] grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left - Draw & Arena Header */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-slate-50 text-center">
+            <p className="text-xs font-black uppercase text-[#ef4444] mb-2 tracking-[0.2em]">BOLA DA VEZ</p>
+            <div className={`text-9xl font-lucky transition-all ${isCalling ? 'blur-sm scale-90 opacity-40' : 'text-slate-800'}`}>
               {isCalling ? rollingNumber : (currentNumber || '--')}
             </div>
+            <button onClick={draw} disabled={isCalling || gameState !== 'PLAYING'} 
+              className="mt-6 w-full bg-[#ef4444] text-white font-lucky text-4xl py-6 rounded-[35px] shadow-[0_10px_0_rgb(185,28,28)] active:shadow-none active:translate-y-2 disabled:bg-slate-300 disabled:shadow-none uppercase">
+              SORTEAR!
+            </button>
           </div>
-          <button onClick={drawNumber} disabled={isCalling || gameState !== 'PLAYING'} className="w-full bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white font-lucky text-2xl py-6 rounded-3xl shadow-xl active:scale-95 transition-all mb-4">SORTEAR!</button>
           
-          {/* Competidores IA */}
-          <div className="bg-white p-6 rounded-[40px] shadow-xl border-4 border-slate-100 space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Users size={20} className="text-slate-600" />
-              <h3 className="font-lucky text-lg text-slate-800 uppercase">Oponentes</h3>
+          <div className="bg-slate-800 p-8 rounded-[40px] shadow-lg border border-slate-700">
+            <div className="flex items-center gap-2 font-lucky text-white uppercase text-xl mb-6">
+              <Swords size={24} className="text-[#ef4444]" /> Arena dos Oponentes
             </div>
-            <div className="space-y-4">
-              {competitors.map(comp => (
-                <div key={comp.id} className="space-y-1">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="flex items-center gap-2 font-bold text-slate-700">
-                      <span className={`w-3 h-3 rounded-full ${comp.color}`} />
-                      {comp.name}
-                      {comp.qualified && <Flag size={14} className="text-green-600 animate-bounce" />}
+            <div className="space-y-4 max-h-[450px] overflow-y-auto custom-scrollbar pr-2">
+              {competitors.map(ai => (
+                <div key={ai.id} className={`p-4 rounded-[30px] border-2 transition-all relative ${ai.progress >= 80 ? 'bg-red-900/30 border-red-500 animate-opponent-hot' : 'bg-slate-900/50 border-slate-700'}`}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="flex items-center gap-2 font-lucky text-white">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ai.dot }} />
+                      <span className="text-lg">{ai.name}</span>
                     </span>
-                    <span className="text-xs font-lucky text-slate-400">{comp.progress.toFixed(0)}%</span>
+                    <span className="font-bold text-slate-400">{ai.progress.toFixed(0)}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-500 ${comp.color}`} 
-                      style={{ width: `${comp.progress}%` }} 
-                    />
+                  <div className="h-3 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div className={`h-full transition-all duration-1000 ${ai.color}`} style={{ width: `${ai.progress}%` }} />
                   </div>
                 </div>
               ))}
@@ -402,69 +481,111 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="lg:col-span-5">
-           <div className={`bg-white p-6 rounded-[50px] shadow-2xl border-8 transition-all duration-500 ${gameState === 'WON' || gameState === 'QUALIFIED' ? 'border-green-400 scale-105' : 'border-slate-100'}`}>
-              <div className="grid grid-cols-5 mb-4 text-center">
-                {['B', 'I', 'N', 'G', 'O'].map((l, i) => <div key={l} className={`text-4xl font-lucky border-b-4 mx-2 pb-2 ${COLUMN_THEMES[i].text} ${COLUMN_THEMES[i].border}`}>{l}</div>)}
-              </div>
-              <div className="grid grid-cols-5 gap-3">
-                {board.map((row, ri) => row.map((cell, ci) => {
-                  const isHint = !cell.marked && cell.value !== "FREE" && drawnNumbers.includes(cell.value as number);
-                  return (
-                    <button 
-                      key={`${ri}-${ci}`} 
-                      onClick={() => markCell(ri, ci)} 
-                      disabled={cell.marked || gameState !== 'PLAYING'} 
-                      className={`aspect-square rounded-2xl flex items-center justify-center text-xl md:text-3xl font-bold transition-all border-2 relative overflow-hidden 
-                        ${cell.value === "FREE" ? 'bg-amber-50 text-amber-600' : 'bg-white border-slate-100'} 
-                        ${cell.marked && cell.value !== "FREE" ? COLUMN_THEMES[ci].marked : 'hover:bg-slate-50'} 
-                        ${lastMarked?.row === ri && lastMarked?.col === ci ? 'animate-mark-pulse shadow-2xl' : ''} 
-                        ${lastError?.row === ri && lastError?.col === ci ? 'animate-error' : ''}
-                        ${isHint ? 'animate-hint-pulse' : ''}`}
-                    >
-                      {cell.value === "FREE" ? <Star fill="currentColor" size={24} /> : cell.value}
-                    </button>
-                  );
-                }))}
-              </div>
-           </div>
+        {/* Center - Player Board */}
+        <div className="lg:col-span-5 flex flex-col items-center">
+          <div ref={bingoCardRef} className={`bg-white p-10 rounded-[60px] shadow-2xl border-[16px] relative w-full overflow-hidden transition-all duration-500 ${gameState === 'WON' ? 'winning-card-highlight' : 'border-white'} ${equippedThemeClass}`}>
+            <div className="grid grid-cols-5 mb-8 text-center">
+              {['B','I','N','G','O'].map((l, i) => (
+                <div key={l} className="flex flex-col items-center">
+                  <div className="text-7xl font-lucky text-[#2563eb] drop-shadow-sm">{l}</div>
+                  <div className={`h-2 w-14 rounded-full ${COLUMN_THEMES[i].line} shadow-sm`} />
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-5 gap-3">
+              {board.map((row, ri) => row.map((cell, ci) => {
+                const isMarked = cell.marked && cell.value !== "FREE";
+                const isCalledNotMarked = !cell.marked && cell.value !== "FREE" && drawnNumbers.includes(cell.value as number);
+                return (
+                  <button key={`${ri}-${ci}`} onClick={() => mark(ri, ci)} disabled={cell.marked || gameState !== 'PLAYING'}
+                    className={`aspect-square rounded-[25px] flex items-center justify-center text-4xl md:text-5xl font-black transition-all border-4 relative text-slate-800
+                      ${cell.value === "FREE" ? 'bg-white border-slate-100' : 'bg-white border-slate-50 shadow-sm'}
+                      ${isMarked ? 'bg-[#2563eb] border-transparent !text-white z-10 shadow-lg' : 'hover:scale-105'}
+                      ${isCalledNotMarked ? 'bg-[#facc15] border-transparent text-slate-900 scale-110 shadow-xl z-30 animate-hint-pulse' : ''}
+                      ${lastError?.row === ri && lastError?.col === ci ? 'animate-error' : ''}`}>
+                    {cell.value === "FREE" ? <Star fill="#f97316" size={40} className="text-orange-500" /> : <span className="relative z-10">{cell.value}</span>}
+                  </button>
+                );
+              }))}
+            </div>
+          </div>
+          <div className="mt-8 flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2 bg-slate-800 px-6 py-2 rounded-full border border-slate-700">
+               <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+               <span className="text-white font-lucky text-xl uppercase tracking-widest">Sua Cartela</span>
+            </div>
+            {playerTitle && <div className="text-blue-600 font-bold text-sm uppercase tracking-widest bg-blue-50 px-4 py-1 rounded-full border border-blue-100">{playerTitle}</div>}
+          </div>
         </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-6">
-           <div className="bg-slate-900 rounded-[40px] shadow-2xl flex flex-col h-[450px] border-4 border-slate-800">
-              <div className="p-4 border-b border-slate-800 flex items-center gap-3 bg-slate-800/50 rounded-t-[36px]">
-                <Radio size={20} className="text-red-500 animate-pulse" /><p className="text-white font-lucky text-lg">CHICO DO GLOBO</p>
+        {/* Right - Announcer */}
+        <div className="lg:col-span-4 flex flex-col">
+          <div style={{ height: cardHeight > 0 ? `${cardHeight}px` : '600px' }} className="bg-slate-900 rounded-[50px] flex flex-col overflow-hidden border-8 border-slate-800 shadow-2xl relative">
+            <div className="bg-slate-800 p-8 flex items-center justify-between border-b border-slate-700">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-[#ef4444] flex items-center justify-center text-white font-lucky text-2xl">C</div>
+                <p className="text-white font-lucky text-2xl flex items-center gap-2">
+                  <Radio size={24} className="text-[#ef4444] animate-pulse" /> CHICO DO GLOBO
+                </p>
               </div>
-              <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                 {chatMessages.map((msg, idx) => (
-                   <div key={idx} className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-white text-slate-900 flex items-center justify-center font-lucky text-sm flex-shrink-0">C</div>
-                      <div className="max-w-[85%] p-4 rounded-3xl text-sm bg-white text-slate-800 font-medium">{msg.text || '...'}</div>
-                   </div>
-                 ))}
-                 {isTyping && (
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-white text-slate-900 flex items-center justify-center font-lucky text-sm flex-shrink-0">C</div>
-                      <div className="p-4 rounded-3xl text-sm bg-slate-800 text-slate-400 font-medium">Escrevendo...</div>
-                    </div>
-                 )}
-              </div>
-           </div>
+            </div>
+            <div ref={scrollRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar bg-slate-950/40">
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'announcer' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] p-6 rounded-[30px] text-lg font-bold shadow-xl border-2 ${m.role === 'announcer' ? 'bg-white text-slate-900 rounded-tl-none border-[#ef4444]' : 'bg-[#2563eb] text-white border-blue-400'}`}>
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+              {isTyping && <div className="flex justify-start"><div className="bg-slate-800 p-4 rounded-full flex gap-2 animate-pulse">{[1,2,3].map(i => <div key={i} className="w-2 h-2 bg-slate-500 rounded-full" />)}</div></div>}
+            </div>
+            {hasNewMessages && !autoScroll && <button onClick={scrollToBottom} className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-[#ef4444] text-white px-8 py-3 rounded-full font-lucky text-lg shadow-2xl animate-bounce flex items-center gap-3 border-4 border-white">Novas Falas <ArrowDown size={24} /></button>}
+          </div>
+          <button onClick={() => setGameState('HOME')} className="mt-8 w-full p-6 bg-white border-2 border-slate-200 rounded-[35px] font-lucky text-2xl text-slate-500 uppercase shadow-md hover:bg-slate-50">MENU PRINCIPAL</button>
         </div>
       </main>
 
-      {(gameState === 'WON' || gameState === 'QUALIFIED' || gameState === 'LOST') && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[500] flex items-center justify-center p-6">
-           <div className="bg-white p-12 rounded-[60px] max-w-xl w-full text-center shadow-2xl">
-              <h2 className="text-7xl font-lucky text-slate-800 mb-4 uppercase">{gameState === 'LOST' ? 'DERROTA!' : 'VITÓRIA!'}</h2>
-              <div className="flex flex-col gap-4">
-                <button onClick={() => setGameState('HOME')} className="w-full bg-slate-800 text-white font-lucky text-2xl py-6 rounded-3xl uppercase hover:bg-slate-700 transition-colors">Menu Principal</button>
-                {gameState === 'QUALIFIED' && (
-                  <button onClick={startFinal} className="w-full bg-yellow-500 text-slate-900 font-lucky text-2xl py-6 rounded-3xl uppercase hover:bg-yellow-400 transition-colors">Ir para Final!</button>
-                )}
-                <button onClick={() => gameMode === 'FRIENDLY' ? enterFriendly() : enterTournament()} className="w-full bg-slate-200 text-slate-700 font-lucky text-2xl py-6 rounded-3xl uppercase hover:bg-slate-300 transition-colors">Jogar Novamente</button>
+      {(gameState === 'WON' || gameState === 'LOST') && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-2xl z-[1000] flex items-center justify-center p-6">
+          <div className="bg-white p-16 rounded-[70px] text-center shadow-2xl max-w-lg w-full border-[12px] border-slate-50 animate-in zoom-in duration-500">
+            {gameState === 'WON' ? (
+              <>
+                <Trophy size={140} className="text-yellow-500 mx-auto mb-8 drop-shadow-xl" />
+                <h2 className="text-8xl font-lucky text-slate-900 mb-2 uppercase">BINGO!</h2>
+                <p className="text-2xl text-slate-500 mb-10">Você bateu e levou a bolada!</p>
+              </>
+            ) : (
+              <>
+                <ShieldAlert size={140} className="text-slate-300 mx-auto mb-8 opacity-50" />
+                <h2 className="text-8xl font-lucky text-slate-900 mb-2 uppercase">{playerRank && playerRank <= 3 ? 'BATEU!' : 'QUASE!'}</h2>
+                <p className="text-2xl text-slate-500 mb-10">Pódio: #{playerRank}</p>
+              </>
+            )}
+            
+            <div className="bg-yellow-50 p-8 rounded-[40px] mb-10 flex justify-between items-center border-2 border-yellow-100 shadow-inner">
+              <div className="text-left">
+                <p className="text-slate-400 text-sm font-black uppercase tracking-widest">Moedas Ganhas</p>
+                <p className="text-5xl font-lucky text-yellow-600 flex items-center gap-3">
+                  <Coins size={36} /> {gameMode === 'TOURNAMENT' ? (playerRank === 1 ? 25 : playerRank === 2 ? 15 : playerRank === 3 ? 8 : 0) : (playerRank === 1 ? 5 : 0)}
+                </p>
               </div>
-           </div>
+              <div className="text-right">
+                <p className="text-slate-400 text-sm font-black uppercase tracking-widest">Seu Saldo</p>
+                <p className="text-3xl font-lucky text-slate-800">{stats.coins}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-6">
+              {gameMode === 'TOURNAMENT' && playerRank && playerRank <= 3 && tournamentStep < 5 ? (
+                <button onClick={() => initGame('TOURNAMENT', tournamentStep + 1)} className="w-full bg-emerald-600 text-white font-lucky py-6 rounded-3xl text-4xl shadow-2xl uppercase transition-transform active:scale-95 flex items-center justify-center gap-4">
+                  PRÓXIMA FASE <ChevronRight size={40} />
+                </button>
+              ) : (
+                <button onClick={() => initGame(gameMode, 1)} className="w-full bg-[#ef4444] text-white font-lucky py-6 rounded-3xl text-4xl shadow-2xl uppercase">NOVA PARTIDA</button>
+              )}
+              <button onClick={() => setGameState('HOME')} className="w-full bg-slate-100 text-slate-600 font-lucky py-5 rounded-3xl text-3xl uppercase">SAIR</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -472,3 +593,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
